@@ -73,6 +73,7 @@ func main() {
 	time.Sleep(2 * time.Second)
 
 	// send message from John to Jane
+	// FIXEME: lines below not complete
 	johnCtx := metadata.AppendToOutgoingContext(ctx, "username", "John")
 	client.SendMessage(johnCtx, &proto.SendMessageRequest{
 		UsernameOrChannel: "Jane",
