@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package chat;
+
+option go_package = "./proto";
+
+import "google/protobuf/empty.proto";
+
+service ChatService {
+    rpc Connect(ConnectRequest) returns (stream ConnectResponse);
+    rpc JoinGroupChat(JoinGroupChatRequest) returns (google.protobuf.Empty);
+    rpc LeftGroupChat(LeftGroupChatRequest) returns (google.protobuf.Empty);
+    rpc CreateGroupChat(CreateGroupChatRequest) returns (google.protobuf.Empty);
+    // this method assumes that the username and channel name do not conflict, the 
+    // username takes precedence.
+    rpc SendMessage(SendMessageRequest) returns (google.protobuf.Empty);
+    rpc ListChannels(google.protobuf.Empty) returns (ListChannelsResponse);
+}
+
+message ConnectRequest {
+    string username = 1;
+}
+
+message ConnectResponse {
+    string message = 1;   
+}
+
+message JoinGroupChatRequest {
+    string channel = 1;
+}
+
+message LeftGroupChatRequest {
+    string channel = 1;
+}
+
+message CreateGroupChatRequest {
+    string channel = 1;
+}
+
+message SendMessageRequest {
+    string username_or_channel = 1;
+    string message = 2;
+}
+
+message ListChannelsResponse {
+    repeated string channels = 1;
+}
