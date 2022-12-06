@@ -72,14 +72,14 @@ func main() {
 	time.Sleep(1 * time.Second)
 
 	// send message from John to Jane
-	johnCtx := metadata.AppendToOutgoingContext(context.Background(), "username", "John")
+	johnCtx := metadata.AppendToOutgoingContext(ctx, "username", "John")
 	client.SendMessage(johnCtx, &proto.SendMessageRequest{
 		UsernameOrChannel: "Jane",
 		Message:           "Hi, how are you?",
 	})
 
 	// reply from Jane
-	janeCtx := metadata.AppendToOutgoingContext(context.Background(), "username", "Jane")
+	janeCtx := metadata.AppendToOutgoingContext(ctx, "username", "Jane")
 	client.SendMessage(janeCtx, &proto.SendMessageRequest{
 		UsernameOrChannel: "John",
 		Message:           "I'm doing great thanks for asking",
