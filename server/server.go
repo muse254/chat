@@ -8,6 +8,7 @@ import (
 	"net"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"chat/proto"
@@ -16,7 +17,7 @@ import (
 // chatServer implements the persistance for the chat service(for this implmentation).
 type chatServer struct {
 	users    map[string]chan string
-	channels map[string]channel
+	channels map[string]*channel
 
 	proto.UnimplementedChatServiceServer
 }
@@ -34,7 +35,6 @@ func (c *chatServer) Connect(req *proto.ConnectRequest, stream proto.ChatService
 
 	// add username to chatServer and create
 	c.users[req.Username] = make(chan string)
-	
 
 	// when message for user is received stream it back to the client
 	ctx := stream.Context()
@@ -48,9 +48,17 @@ func (c *chatServer) Connect(req *proto.ConnectRequest, stream proto.ChatService
 		case <-ctx.Done():
 			// remove user from all group channels
 			for channel, chatroom := range c.channels {
-				removeUser(chatroom.participants, req.Username)
-				fmt.Printf("%s removed from channel %s\n", req.Username, channel)
+				users, ok := removeUser(chatroom.participants, req.Username)
+				if !ok {
+					return fmt.Errorf("unable to remove %q from channel %s", req.Username, channel)
+				}
+				chatroom.participants = users
+				fmt.Printf("%s removed from channel %s: %s\n", req.Username, channel, users)
 			}
+
+			// remove user message chan from server
+			delete(c.users, req.Username)
+			fmt.Printf("%q removed from server\n", req.Username)
 
 			return ctx.Err()
 		}
@@ -64,16 +72,14 @@ func (c *chatServer) JoinGroupChat(ctx context.Context, req *proto.JoinGroupChat
 		return nil, errors.New("the channel does not exist")
 	}
 
-	// the context carries the username; extract username
-	// if username is not present, account was not created
-	username, ok := ctx.Value("username").(string)
-	if !ok {
-		return nil, errors.New("the client does not have a username")
+	username, err := getUsername(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	// add participant to channel
 	channel.participants = append(channel.participants, username)
-	fmt.Printf("%s has joined channel %s", username, req.Channel)
+	fmt.Printf("%q has joined channel %q\n", username, req.Channel)
 
 	return &emptypb.Empty{}, nil
 }
@@ -85,16 +91,24 @@ func (c *chatServer) LeftGroupChat(ctx context.Context, req *proto.LeftGroupChat
 		return nil, errors.New("the channel does not exist")
 	}
 
-	// the context carries the username; extract username
-	// if username is not present, account was not created
-	username, ok := ctx.Value("username").(string)
-	if !ok {
-		return nil, errors.New("the client does not have a username")
+	username, err := getUsername(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	// remove user from the channel
-	if removeUser(channel.participants, username) {
+	channel.participants, ok = removeUser(channel.participants, username)
+	if !ok {
 		return nil, errors.New("user was not in channel")
+	}
+	//channel.participants = users
+
+	fmt.Printf("%q has left channel %s\n", username, req.Channel)
+
+	// if no users in channel, delete channel
+	if len(channel.participants) == 0 {
+		delete(c.channels, req.Channel)
+		fmt.Printf("%q channel deleted, no members\n", req.Channel)
 	}
 
 	return &emptypb.Empty{}, nil
@@ -106,18 +120,18 @@ func (c *chatServer) CreateGroupChat(ctx context.Context, req *proto.CreateGroup
 		return nil, errors.New("the channel already exists")
 	}
 
-	// the context carries the username; extract username
-	// if username is not present, account was not created
-	username, ok := ctx.Value("username").(string)
-	if !ok {
-		return nil, errors.New("the client does not have a username")
+	username, err := getUsername(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	// create channel and set fist participant as current client
-	c.channels[req.Channel] = channel{
+	c.channels[req.Channel] = &channel{
 		participants: []string{username},
 		messages:     make(chan string),
 	}
+
+	fmt.Printf("%q channel created by %q\n", req.Channel, username)
 
 	return &emptypb.Empty{}, nil
 }
@@ -152,15 +166,28 @@ func (c *chatServer) ListChannels(ctx context.Context, _ *emptypb.Empty) (*proto
 	}, nil
 }
 
-func removeUser(users []string, username string) bool {
+func removeUser(users []string, username string) ([]string, bool) {
+	fmt.Printf("%q to remove %q\n", users, username)
 	for i, user := range users {
 		if user == username {
 			users[i] = users[len(users)-1]
-			users = users[:len(users)-1]
-			return true
+			return users[:len(users)-1], true
 		}
 	}
-	return false
+	return nil, false
+}
+
+func getUsername(ctx context.Context) (string, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return "", errors.New("could not retrieve metadata from context")
+	}
+
+	if res, ok := md["username"]; ok {
+		return res[0], nil
+	}
+
+	return "", errors.New("the client did not provide a username")
 }
 
 func main() {
@@ -171,7 +198,8 @@ func main() {
 
 	srv := grpc.NewServer()
 	proto.RegisterChatServiceServer(srv, &chatServer{
-		users: map[string]chan string{},
+		users:    map[string]chan string{},
+		channels: map[string]*channel{},
 	})
 
 	if err = srv.Serve(listener); err != nil {

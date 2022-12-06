@@ -1,0 +1,42 @@
+(go run server/server.go) & (go run client/client.go)
+```
+[1] 86715
+Jane has joined chat server
+John has joined chat server
+Jane received: Hi, how are you?
+John received: I'm doing great thanks for asking
+"Study" channel created by "Jane"
+"John" has joined channel "Study"
+All channels: Study
+["Jane" "John"] to remove "John"
+"John" has left channel Study
+["Jane"] to remove "Jane"
+"Jane" has left channel Study
+"Study" channel deleted, no members
+^Csignal: interrupt
+"John" removed from server
+"Jane" removed from server
+```
+
+
+go run server/server.go
+```
+"Study" channel created by "Jane"
+"John" has joined channel "Study"
+["Jane" "John"] to remove "John"
+"John" has left channel Study
+["Jane"] to remove "Jane"
+"Jane" has left channel Study
+"Study" channel deleted, no members
+"Jane" removed from server
+"John" removed from server
+```
+
+go run client/client.go
+```
+John has joined chat server
+Jane has joined chat server
+Jane received: Hi, how are you?
+John received: I'm doing great thanks for asking
+All channels: Study
+```

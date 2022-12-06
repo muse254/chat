@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"chat/proto"
 )
@@ -37,13 +39,10 @@ func createClient(ctx context.Context, c proto.ChatServiceClient, username strin
 			}
 
 			// print out to stdout: [username: message]
-			fmt.Printf("%s: %s\n", username, streamResp.Message)
+			fmt.Printf("%s received: %s\n", username, streamResp.Message)
 		}
-
 	}
 }
-
-func sendMessage()
 
 func main() {
 	// dial server
@@ -69,15 +68,54 @@ func main() {
 		createClient(ctx, client, "Jane")
 	}()
 
-	// give 2 seconds for users to join
-	time.Sleep(2 * time.Second)
+	// allow all users to join in first
+	time.Sleep(1 * time.Second)
 
 	// send message from John to Jane
-	// FIXEME: lines below not complete
-	johnCtx := metadata.AppendToOutgoingContext(ctx, "username", "John")
+	johnCtx := metadata.AppendToOutgoingContext(context.Background(), "username", "John")
 	client.SendMessage(johnCtx, &proto.SendMessageRequest{
 		UsernameOrChannel: "Jane",
+		Message:           "Hi, how are you?",
 	})
 
+	// reply from Jane
+	janeCtx := metadata.AppendToOutgoingContext(context.Background(), "username", "Jane")
+	client.SendMessage(janeCtx, &proto.SendMessageRequest{
+		UsernameOrChannel: "John",
+		Message:           "I'm doing great thanks for asking",
+	})
+
+	// create group chat
+	client.CreateGroupChat(janeCtx, &proto.CreateGroupChatRequest{
+		Channel: "Study",
+	})
+
+	// let John join the Study channel
+	client.JoinGroupChat(johnCtx, &proto.JoinGroupChatRequest{
+		Channel: "Study",
+	})
+
+	// list the channels
+	resp, err := client.ListChannels(johnCtx, &emptypb.Empty{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("All channels: %s\n", strings.Join(resp.Channels, ", "))
+
+	// all members leave channel: Study
+	if _, err = client.LeftGroupChat(johnCtx, &proto.LeftGroupChatRequest{
+		Channel: "Study",
+	}); err != nil {
+		log.Fatal(err)
+	}
+	if _, err = client.LeftGroupChat(janeCtx, &proto.LeftGroupChatRequest{
+		Channel: "Study",
+	}); err != nil {
+		log.Fatal(err)
+	}
+
+	<-janeCtx.Done()
+	<-johnCtx.Done()
 	<-ctx.Done()
 }
